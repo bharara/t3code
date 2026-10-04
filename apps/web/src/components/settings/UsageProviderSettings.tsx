@@ -72,7 +72,6 @@ export function UsageProviderSettings({
     <>
       <SettingsSection {...searchableSetting("codex-auto-reset-credits")}>
         <SettingsRow
-          id="codex-auto-reset-credits"
           title="Auto-apply expiring banked resets"
           description="Automatically use the Codex reset closest to expiring. This device's server must stay running."
           control={
