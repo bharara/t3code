@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { AddUsageLimitSourceDialog } from "./AddUsageLimitSourceDialog";
 import { searchableSetting } from "./settingsSearch";
@@ -27,12 +28,16 @@ export function UsageProviderSettings({
   environmentLabel,
   sources,
   cursorKeychainUsageEnabled,
+  codexAutoApplyResetCredits,
+  codexResetCreditExpiryMinutes,
   readOnly,
 }: {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
   readonly sources: UnifiedSettings["usageLimitSources"];
   readonly cursorKeychainUsageEnabled: boolean;
+  readonly codexAutoApplyResetCredits: boolean;
+  readonly codexResetCreditExpiryMinutes: number;
   readonly readOnly: boolean;
 }) {
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
@@ -65,6 +70,47 @@ export function UsageProviderSettings({
 
   return (
     <>
+      <SettingsSection {...searchableSetting("codex-auto-reset-credits")}>
+        <SettingsRow
+          id="codex-auto-reset-credits"
+          title="Auto-apply expiring banked resets"
+          description="Automatically use the Codex reset closest to expiring. This device's server must stay running."
+          control={
+            <Switch
+              aria-label="Auto-apply expiring banked resets"
+              checked={codexAutoApplyResetCredits}
+              disabled={readOnly}
+              onCheckedChange={(enabled) => updateSettings({ codexAutoApplyResetCredits: enabled })}
+            />
+          }
+        />
+        <SettingsRow
+          title="Minutes before expiration"
+          description="Apply a reset within this window (1–1440 minutes)."
+          control={
+            <Input
+              key={codexResetCreditExpiryMinutes}
+              className="w-24"
+              type="number"
+              min={1}
+              max={1440}
+              step={1}
+              defaultValue={codexResetCreditExpiryMinutes}
+              aria-label="Minutes before reset expiration"
+              disabled={readOnly || !codexAutoApplyResetCredits}
+              onBlur={(event) => {
+                const value = Number(event.currentTarget.value);
+                if (Number.isInteger(value) && value >= 1 && value <= 1440) {
+                  updateSettings({ codexResetCreditExpiryMinutes: value });
+                } else event.currentTarget.value = String(codexResetCreditExpiryMinutes);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+          }
+        />
+      </SettingsSection>
       <SettingsSection
         {...searchableSetting("usage-providers")}
         headerAction={

@@ -577,6 +577,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "codex-auto-reset-credits",
+    title: "Auto-apply expiring banked resets",
+    to: "/settings/providers",
+    searchTerms: ["codex banked reset credit expiry expiration automatic threshold minutes"],
+  },
+  {
     id: "usage-providers",
     title: "Usage providers",
     to: "/settings/providers",

@@ -13,6 +13,7 @@ import { ScreenScrollView } from "../../components/ScreenScrollView";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { CodexResetCreditSettings } from "./CodexResetCreditSettings";
 import { SettingsActionRow } from "./components/SettingsActionRow";
 import {
   AndroidSettingsEnvironmentFilter,
@@ -40,6 +41,7 @@ export function SettingsProviderAccountsRouteScreen() {
           ) : (
             selectedTargets.map((environment) => (
               <SettingsSection key={environment.environmentId} title={environment.label}>
+                <CodexResetCreditSettings environment={environment} />
                 {environment.serverConfig.providers
                   .filter(
                     (provider) =>

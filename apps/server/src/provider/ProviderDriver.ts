@@ -91,10 +91,11 @@ export interface ProviderInstance {
    * re-probe so the snapshot reflects the cleared windows. Account-level,
    * not thread-level, which is why it lives here rather than on the adapter.
    */
-  readonly consumeResetCredit?: () => Effect.Effect<
-    ProviderConsumeResetCreditOutcome,
-    ProviderDriverError
-  >;
+  /** Credential directory identity, used to check each account once per automatic sweep. */
+  readonly resetCreditAccountKey?: string;
+  readonly consumeResetCredit?: (options?: {
+    readonly expiresWithinMinutes: number;
+  }) => Effect.Effect<ProviderConsumeResetCreditOutcome, ProviderDriverError>;
   readonly orchestrationAdapter: ProviderAdapterV2Shape;
   readonly textGeneration: TextGeneration["Service"];
   readonly auth?: ProviderAuthController;

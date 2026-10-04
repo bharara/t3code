@@ -87,6 +87,12 @@ Claude resets are not available when the server runs on macOS, where Claude keep
 Keychain. On narrow screens, numbered rows below
 the bar show each account's quota, countdown, and credits. Tap a row to open its details.
 
+To use expiring Codex credits automatically, enable **Auto-apply expiring banked resets** in
+**Settings → Providers** (on mobile, **Settings → Provider accounts**). Choose how many minutes
+before expiration to apply the next reset; the default is 30. This is off by default and applies
+to Codex accounts that support **Use reset** on that environment, excluding hub accounts. Keep
+the environment's server running. Connected clients show a confirmation when a reset is used.
+
 The same account signed in on more than one environment, or reported by a hub as well, counts once.
 Filter with the environment dropdown to see what a single machine has.
 

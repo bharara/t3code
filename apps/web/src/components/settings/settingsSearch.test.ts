@@ -110,6 +110,16 @@ describe("searchSettings", () => {
     ]);
   });
 
+  it.each(["banked resets", "codex expiry", "reset threshold"])(
+    "finds automatic reset settings by %s",
+    (query) => {
+      expect(searchSettings(query)[0]).toMatchObject({
+        id: "codex-auto-reset-credits",
+        to: "/settings/providers",
+      });
+    },
+  );
+
   it.each(["usage providers", "CLIProxyAPI", "CLI proxy hub", "management key"])(
     "finds usage-provider management by %s",
     (query) => {

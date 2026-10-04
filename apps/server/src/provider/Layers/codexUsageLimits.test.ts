@@ -1,4 +1,5 @@
 import * as CodexErrors from "effect-codex-app-server/errors";
+import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -313,4 +314,24 @@ describe("codexUsageLimitResetAt", () => {
       codexUsageLimitResetAt({ primary: { usedPercent: 50, resetsAt: 2000000000 } }),
     ).toBeNull();
   });
+});
+
+it("pins the next reset to the available credit that expires first", () => {
+  const result = codexRateLimitsToLimits({
+    checkedAt: "2026-10-04T12:00:00.000Z",
+    snapshot: {},
+    resetCredits: {
+      availableCount: 3,
+      credits: [
+        { id: "later", status: "available", expiresAt: 1791117000 },
+        { id: "redeemed", status: "redeemed", expiresAt: 1791114000 },
+        { id: "soonest", status: "available", expiresAt: 1791115200 },
+        { id: "invalid", status: "available", expiresAt: -1 },
+      ],
+    },
+  });
+  expect(result.resetCredits?.nextCreditId).toBe("soonest");
+  expect(result.resetCredits?.nextExpiresAt).toBe(
+    DateTime.formatIso(DateTime.makeUnsafe(1791115200 * 1000)),
+  );
 });

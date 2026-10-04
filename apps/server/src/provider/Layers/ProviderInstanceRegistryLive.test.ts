@@ -45,6 +45,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
+import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import * as BackgroundPolicy from "../../background/BackgroundPolicy.ts";
@@ -374,6 +375,93 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
       // The usage read fails, so the re-probe cannot confirm new limits.
       yield* codex!.snapshot.refresh;
       expect(yield* codex!.consumeResetCredit!()).toBe("alreadyRedeemed");
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.live("automatically redeems the earliest Codex credit and publishes confirmation", () =>
+    Effect.gen(function* () {
+      if (yield* isHostWindows) return;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const settings = yield* ServerSettings.ServerSettingsService;
+      yield* settings.updateSettings({ codexAutoApplyResetCredits: true });
+      const fixtures = yield* makeTildeProviderFixtures();
+      const now = yield* DateTime.now;
+      const expiresAt = Math.floor(DateTime.toEpochMillis(now) / 1000) + 600;
+      const rateLimits = {
+        rateLimits: { primary: { usedPercent: 90, windowDurationMins: 300 } },
+        rateLimitsByLimitId: {},
+        rateLimitResetCredits: {
+          availableCount: 2,
+          credits: [
+            {
+              id: "later",
+              status: "available",
+              grantedAt: 1,
+              resetType: "codexRateLimits",
+              expiresAt: expiresAt + 3600,
+            },
+            {
+              id: "soonest",
+              status: "available",
+              grantedAt: 1,
+              resetType: "codexRateLimits",
+              expiresAt,
+            },
+          ],
+        },
+      };
+      const script = {
+        rootThreadId: "probe-thread",
+        notifications: [],
+        account: { type: "chatgpt", email: "test@example.com", planType: "plus" },
+        rateLimits,
+        resetCreditOutcome: "reset",
+        recordRequests: true,
+        rateLimitsAfterReset: {
+          ...rateLimits,
+          rateLimitResetCredits: { availableCount: 0, credits: [] },
+        },
+      };
+      const encodeScript = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
+      yield* fileSystem.writeFileString(fixtures.codexScriptPath, yield* encodeScript(script));
+      const codexId = ProviderInstanceId.make("codex_auto_reset");
+      const { registry } = yield* makeProviderInstanceRegistry({
+        drivers: [CodexDriver],
+        configMap: {
+          [codexId]: {
+            driver: ProviderDriverKind.make("codex"),
+            enabled: true,
+            environment: [
+              { name: "T3_CODEX_COLLAB_SCRIPT", value: fixtures.codexScriptPath, sensitive: false },
+            ],
+            config: makeCodexConfig({ enabled: true, binaryPath: fixtures.codexBinaryPath }),
+          },
+        },
+      });
+      const codex = yield* registry.getInstance(codexId);
+      yield* codex!.snapshot.refresh;
+      yield* fileSystem.writeFileString(
+        fixtures.codexScriptPath,
+        yield* encodeScript({ ...script, rateLimits: null, failRateLimitsRead: true }),
+      );
+      // A failed fresh probe preserves cached bars, but must never spend the cached credit.
+      expect(yield* codex!.consumeResetCredit!({ expiresWithinMinutes: 30 })).toBe(
+        "nothingToReset",
+      );
+      expect(yield* fileSystem.exists(`${fixtures.codexScriptPath}.requests`)).toBe(false);
+      yield* fileSystem.writeFileString(fixtures.codexScriptPath, yield* encodeScript(script));
+      expect(yield* codex!.consumeResetCredit!({ expiresWithinMinutes: 30 })).toBe("reset");
+      const snapshot = yield* codex!.snapshot.getSnapshot;
+      expect(snapshot.usageLimits?.autoAppliedResetAt).toBeDefined();
+      const requests = yield* fileSystem.readFileString(`${fixtures.codexScriptPath}.requests`);
+      expect(requests).toContain('"creditId":"soonest"');
+      // Once a manual or automatic redemption has removed the credit, a fresh check spends nothing.
+      expect(yield* codex!.consumeResetCredit!({ expiresWithinMinutes: 30 })).toBe(
+        "nothingToReset",
+      );
+      expect(yield* fileSystem.readFileString(`${fixtures.codexScriptPath}.requests`)).toBe(
+        requests,
+      );
     }).pipe(Effect.provide(testLayer)),
   );
 

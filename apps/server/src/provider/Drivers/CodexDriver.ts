@@ -23,6 +23,8 @@
  */
 import { CodexSettings, ProviderDriverKind } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -42,6 +44,7 @@ import {
 import * as ServerSettings from "../../serverSettings.ts";
 import { ProviderDriverError } from "../Errors.ts";
 import * as ResetCreditCoordinator from "../Layers/resetCreditCoordinator.ts";
+import { isResetCreditExpiring } from "../autoApplyResetCredits.ts";
 import {
   checkCodexProviderStatus,
   makePendingCodexProvider,
@@ -309,10 +312,36 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
       // its own account under `effectiveHomePath`, while plain instances share
       // the common home. The continuation key would conflate the two.
       const accountKey = homeLayout.effectiveHomePath ?? homeLayout.sharedHomePath;
-      const consumeResetCredit: NonNullable<ProviderInstance["consumeResetCredit"]> = () =>
+      const consumeResetCredit: NonNullable<ProviderInstance["consumeResetCredit"]> = (options) =>
         resetCreditCoordinator
           .redeem(accountKey, (idempotencyKey) =>
             Effect.gen(function* () {
+              let creditId: string | undefined;
+              if (options) {
+                // Recheck under the account lock: a manual redemption may have won the race.
+                const settings = yield* serverSettings.getSettings;
+                if (!settings.codexAutoApplyResetCredits) return "nothingToReset" as const;
+                const before = (yield* snapshot.getSnapshot).usageLimits?.checkedAt;
+                const refreshed = yield* snapshot.refresh;
+                const now = yield* Clock.currentTimeMillis;
+                const latestSettings = yield* serverSettings.getSettings;
+                if (
+                  !latestSettings.codexAutoApplyResetCredits ||
+                  refreshed.usageLimits?.checkedAt === before ||
+                  refreshed.usageLimits?.unavailable ||
+                  !isResetCreditExpiring(
+                    refreshed.usageLimits,
+                    now,
+                    Math.min(
+                      options.expiresWithinMinutes,
+                      latestSettings.codexResetCreditExpiryMinutes,
+                    ),
+                  )
+                )
+                  return "nothingToReset" as const;
+                creditId = refreshed.usageLimits?.resetCredits?.nextCreditId;
+                if (!creditId) return "nothingToReset" as const;
+              }
               const { client } = yield* withCodexAppServerClient({
                 binaryPath: effectiveConfig.binaryPath,
                 homePath: effectiveConfig.homePath,
@@ -323,6 +352,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
               });
               const response = yield* client.request("account/rateLimitResetCredit/consume", {
                 idempotencyKey,
+                ...(creditId ? { creditId } : {}),
               });
               return response.outcome;
             }).pipe(Effect.scoped, Effect.timeout("20 seconds")),
@@ -346,6 +376,14 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
             // unconfirmed refresh.
             Effect.tap((outcome) =>
               Effect.gen(function* () {
+                if (options && outcome === "reset") {
+                  const now = yield* DateTime.now;
+                  yield* snapshot.applyUsageLimits({
+                    windows: [],
+                    checkedAt: DateTime.formatIso(now),
+                    autoAppliedResetAt: DateTime.formatIso(now),
+                  });
+                }
                 const before = (yield* snapshot.getSnapshot).usageLimits?.checkedAt;
                 const refreshed = yield* snapshot.refresh;
                 const after = refreshed.usageLimits?.checkedAt;
@@ -376,6 +414,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
         snapshot,
         snapshotForCwd,
         consumeResetCredit,
+        resetCreditAccountKey: accountKey,
         orchestrationAdapter,
         textGeneration,
       } satisfies ProviderInstance;

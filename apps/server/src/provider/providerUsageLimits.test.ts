@@ -87,3 +87,24 @@ describe("resolveUsageLimitsAfterProbe", () => {
     expect(resolveUsageLimitsAfterProbe({ published: undefined, probed: failed })).toBe(failed);
   });
 });
+
+it("retains automatic reset confirmations across usage updates and probes", () => {
+  const autoAppliedResetAt = "2026-09-03T12:00:01.000Z";
+  const confirmed = applyUsageLimitsUpdate({
+    previous: published,
+    checkedAt,
+    update: { windows: [], autoAppliedResetAt },
+  });
+  expect(confirmed?.autoAppliedResetAt).toBe(autoAppliedResetAt);
+  const updated = applyUsageLimitsUpdate({
+    previous: confirmed,
+    checkedAt,
+    update: { windows: [{ ...session, usedPercent: 0 }] },
+  });
+  expect(updated?.autoAppliedResetAt).toBe(autoAppliedResetAt);
+  const probed = resolveUsageLimitsAfterProbe({
+    published: updated,
+    probed: { checkedAt, windows: [] },
+  });
+  expect(probed?.autoAppliedResetAt).toBe(autoAppliedResetAt);
+});

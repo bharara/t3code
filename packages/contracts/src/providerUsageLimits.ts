@@ -35,7 +35,7 @@ export type ServerProviderUsageWindow = typeof ServerProviderUsageWindow.Type;
 export const ServerProviderResetCredits = Schema.Struct({
   availableCount: NonNegativeInt,
   nextExpiresAt: Schema.optional(IsoDateTime),
-  /** Pins hub redemption to the displayed credit, including retries from another client. */
+  /** Pins redemption to the displayed credit, including automatic expiry checks. */
   nextCreditId: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerProviderResetCredits = typeof ServerProviderResetCredits.Type;
@@ -52,6 +52,8 @@ export const ServerProviderUsageLimits = Schema.Struct({
   windows: ForwardCompatibleArray(ServerProviderUsageWindow),
   /** Opaque credential identity when the provider does not report an account. */
   credentialFingerprint: Schema.optional(TrimmedNonEmptyString),
+  /** Latest automatic redemption, retained across probes for connected clients. */
+  autoAppliedResetAt: Schema.optional(IsoDateTime),
   resetCredits: Schema.optional(ServerProviderResetCredits),
   /** Provider-owned usage settings when quota windows are not available to the client. */
   externalUsage: Schema.optional(
@@ -76,6 +78,7 @@ export type ServerProviderUsageLimits = typeof ServerProviderUsageLimits.Type;
  * `id` onto the instance's published snapshot; omitted windows are unchanged.
  */
 export const ProviderUsageLimitsUpdate = Schema.Struct({
+  autoAppliedResetAt: Schema.optional(IsoDateTime),
   windows: Schema.Array(ServerProviderUsageWindow),
 });
 export type ProviderUsageLimitsUpdate = typeof ProviderUsageLimitsUpdate.Type;

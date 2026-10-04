@@ -1105,3 +1105,20 @@ describe("branch naming settings", () => {
     },
   );
 });
+
+describe("automatic Codex reset settings", () => {
+  it("is opt-in and defaults to thirty minutes", () => {
+    const settings = decodeServerSettings({});
+    expect(settings.codexAutoApplyResetCredits).toBe(false);
+    expect(settings.codexResetCreditExpiryMinutes).toBe(30);
+    expect(
+      decodeServerSettingsPatch({
+        codexAutoApplyResetCredits: true,
+        codexResetCreditExpiryMinutes: 10,
+      }),
+    ).toEqual({ codexAutoApplyResetCredits: true, codexResetCreditExpiryMinutes: 10 });
+  });
+  it.each([0, -1, 1441, 1.5])("rejects invalid expiry window %s", (minutes) => {
+    expect(() => decodeServerSettingsPatch({ codexResetCreditExpiryMinutes: minutes })).toThrow();
+  });
+});

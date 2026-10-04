@@ -90,11 +90,27 @@ rl.on("line", (line) => {
     });
     return;
   }
+  if (method === "account/rateLimits/read" && script.rateLimits) {
+    write({ id, result: script.rateLimits });
+    return;
+  }
   if (method === "account/rateLimits/read" && script.failRateLimitsRead) {
     write({ id, error: { code: -32000, message: "usage unavailable" } });
     return;
   }
   if (method === "account/rateLimitResetCredit/consume" && script.resetCreditOutcome) {
+    if (script.recordRequests) {
+      NodeFS.appendFileSync(
+        `${process.env.T3_CODEX_COLLAB_SCRIPT}.requests`,
+        `${JSON.stringify({ method, params: message.params })}\n`,
+      );
+    }
+    if (script.rateLimitsAfterReset) {
+      NodeFS.writeFileSync(
+        process.env.T3_CODEX_COLLAB_SCRIPT,
+        JSON.stringify({ ...script, rateLimits: script.rateLimitsAfterReset }),
+      );
+    }
     write({ id, result: { outcome: script.resetCreditOutcome } });
     return;
   }

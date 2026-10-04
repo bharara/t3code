@@ -37,6 +37,7 @@ export interface CodexRateLimitSnapshot {
 export interface CodexResetCreditsSummary {
   readonly availableCount: number;
   readonly credits?: ReadonlyArray<{
+    readonly id?: string;
     readonly status: string;
     readonly expiresAt?: number | null;
   }> | null;
@@ -101,15 +102,17 @@ export function codexResetCreditsToContract(
   summary: CodexResetCreditsSummary | null | undefined,
 ): ServerProviderResetCredits | undefined {
   if (!summary) return undefined;
-  const expiries = (summary.credits ?? [])
-    .filter((credit) => credit.status === "available")
-    .map((credit) => credit.expiresAt)
-    .filter((value): value is number => typeof value === "number");
-  const nextExpiresAt =
-    expiries.length > 0 ? isoFromEpochSeconds(Math.min(...expiries)) : undefined;
+  const nextCredit = (summary.credits ?? [])
+    .filter(
+      (credit) =>
+        credit.status === "available" && isoFromEpochSeconds(credit.expiresAt) !== undefined,
+    )
+    .toSorted((left, right) => (left.expiresAt ?? Infinity) - (right.expiresAt ?? Infinity))[0];
+  const nextExpiresAt = isoFromEpochSeconds(nextCredit?.expiresAt);
   return {
     availableCount: Math.max(0, summary.availableCount),
     ...(nextExpiresAt ? { nextExpiresAt } : {}),
+    ...(nextCredit?.id ? { nextCreditId: nextCredit.id } : {}),
   };
 }
 

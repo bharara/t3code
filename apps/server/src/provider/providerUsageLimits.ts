@@ -52,7 +52,7 @@ export function makeUnavailableUsageLimits(input: {
  * publishes. Windows upsert by `id`; a window the update omits keeps its
  * previous values, and a window that arrives without `resetsAt` or
  * `windowDurationMins` keeps whatever the last probe resolved for it. An
- * update with no windows leaves `previous` untouched.
+ * update with no windows leaves `previous` untouched unless it confirms an automatic reset.
  *
  * An `unsupported` snapshot stays unsupported: an account that cannot have
  * subscription windows will not start reporting them mid-turn.
@@ -63,6 +63,13 @@ export function applyUsageLimitsUpdate(input: {
   readonly checkedAt: string;
 }): ServerProviderUsageLimits | undefined {
   const { previous, update } = input;
+  if (
+    update.windows.length === 0 &&
+    update.autoAppliedResetAt !== undefined &&
+    previous !== undefined
+  ) {
+    return { ...previous, autoAppliedResetAt: update.autoAppliedResetAt };
+  }
   if (update.windows.length === 0 || previous?.unavailable?.reason === "unsupported") {
     return previous;
   }
@@ -89,11 +96,15 @@ export function applyUsageLimitsUpdate(input: {
     }
   }
   if (!changed && previous !== undefined && previous.unavailable === undefined) {
-    return previous;
+    return update.autoAppliedResetAt
+      ? { ...previous, autoAppliedResetAt: update.autoAppliedResetAt }
+      : previous;
   }
+  const autoAppliedResetAt = update.autoAppliedResetAt ?? previous?.autoAppliedResetAt;
   return {
     ...makeUsageLimits({ checkedAt: input.checkedAt, windows: merged.values() }),
     ...(previous?.resetCredits !== undefined ? { resetCredits: previous.resetCredits } : {}),
+    ...(autoAppliedResetAt ? { autoAppliedResetAt } : {}),
   };
 }
 
@@ -130,5 +141,7 @@ export function resolveUsageLimitsAfterProbe(input: {
   if (probed?.unavailable?.reason === "probeFailed" && published && !published.unavailable) {
     return published;
   }
-  return probed;
+  return probed && published?.autoAppliedResetAt
+    ? { ...probed, autoAppliedResetAt: published.autoAppliedResetAt }
+    : probed;
 }
