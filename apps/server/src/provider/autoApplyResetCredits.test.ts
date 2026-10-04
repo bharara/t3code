@@ -1,13 +1,28 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  type ServerProvider,
+} from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
+import * as TestClock from "effect/testing/TestClock";
+import { ServerSettingsService } from "../serverSettings.ts";
+import { ProviderInstanceRegistry } from "./Services/ProviderInstanceRegistry.ts";
 import * as Stream from "effect/Stream";
 
 import type { ProviderInstance } from "./ProviderDriver.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "./providerMaintenance.ts";
-import { autoApplyResetCredits, isResetCreditExpiring } from "./autoApplyResetCredits.ts";
+import {
+  AutoApplyResetCreditsLive,
+  autoApplyResetCredits,
+  isResetCreditExpiring,
+} from "./autoApplyResetCredits.ts";
 
 const now = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-04T12:00:00Z"));
 const limits = (minutes: number, availableCount = 1) => ({
@@ -113,5 +128,40 @@ describe("expiring reset credits", () => {
       );
       expect(redeemed).toEqual(["first", "second"]);
     }),
+  );
+
+  it.effect("does no provider work until enabled and stops when disabled", () =>
+    Effect.gen(function* () {
+      const settings = yield* Ref.make(DEFAULT_SERVER_SETTINGS);
+      const settingsReads = yield* Queue.unbounded<boolean>();
+      const instanceChecks = yield* Queue.unbounded<void>();
+      let checks = 0;
+      const dependencies = Layer.mergeAll(
+        Layer.mock(ServerSettingsService)({
+          getSettings: Ref.get(settings).pipe(
+            Effect.tap((current) => Queue.offer(settingsReads, current.codexAutoApplyResetCredits)),
+          ),
+        }),
+        Layer.mock(ProviderInstanceRegistry)({
+          listInstances: Effect.sync(() => {
+            checks += 1;
+          }).pipe(Effect.andThen(Queue.offer(instanceChecks, undefined)), Effect.as([])),
+        }),
+      );
+      yield* Layer.build(AutoApplyResetCreditsLive.pipe(Layer.provide(dependencies)));
+      expect(yield* Queue.take(settingsReads)).toBe(false);
+      expect(checks).toBe(0);
+
+      yield* Ref.update(settings, (current) => ({ ...current, codexAutoApplyResetCredits: true }));
+      yield* TestClock.adjust("1 minute");
+      yield* Queue.take(instanceChecks);
+      expect(yield* Queue.take(settingsReads)).toBe(true);
+      expect(checks).toBe(1);
+
+      yield* Ref.update(settings, (current) => ({ ...current, codexAutoApplyResetCredits: false }));
+      yield* TestClock.adjust("1 minute");
+      expect(yield* Queue.take(settingsReads)).toBe(false);
+      expect(checks).toBe(1);
+    }).pipe(Effect.scoped),
   );
 });
