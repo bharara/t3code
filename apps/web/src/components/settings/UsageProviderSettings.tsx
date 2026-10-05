@@ -87,26 +87,27 @@ export function UsageProviderSettings({
           title="Minutes before expiration"
           description="Apply a reset within this window (1–1440 minutes)."
           control={
-            <Input
-              key={codexResetCreditExpiryMinutes}
-              className="w-24"
-              type="number"
-              min={1}
-              max={1440}
-              step={1}
-              defaultValue={codexResetCreditExpiryMinutes}
-              aria-label="Minutes before reset expiration"
-              disabled={readOnly || !codexAutoApplyResetCredits}
-              onBlur={(event) => {
-                const value = Number(event.currentTarget.value);
-                if (Number.isInteger(value) && value >= 1 && value <= 1440) {
-                  updateSettings({ codexResetCreditExpiryMinutes: value });
-                } else event.currentTarget.value = String(codexResetCreditExpiryMinutes);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-            />
+            <div className="w-24">
+              <Input
+                key={codexResetCreditExpiryMinutes}
+                type="number"
+                min={1}
+                max={1440}
+                step={1}
+                defaultValue={codexResetCreditExpiryMinutes}
+                aria-label="Minutes before reset expiration"
+                disabled={readOnly || !codexAutoApplyResetCredits}
+                onBlur={(event) => {
+                  const value = Number(event.currentTarget.value);
+                  if (Number.isInteger(value) && value >= 1 && value <= 1440) {
+                    updateSettings({ codexResetCreditExpiryMinutes: value });
+                  } else event.currentTarget.value = String(codexResetCreditExpiryMinutes);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+              />
+            </div>
           }
         />
       </SettingsSection>
